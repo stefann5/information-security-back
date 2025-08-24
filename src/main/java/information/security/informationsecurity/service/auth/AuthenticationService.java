@@ -1,9 +1,9 @@
 package information.security.informationsecurity.service.auth;
 
-import information.security.informationsecurity.dto.auth.AuthenticationResponse;
-import information.security.informationsecurity.dto.auth.LoginRequestDTO;
-import information.security.informationsecurity.dto.auth.LoginResponseDTO;
+import information.security.informationsecurity.dto.auth.*;
 import information.security.informationsecurity.exceptions.UserAuthenticationException;
+import information.security.informationsecurity.model.auth.CommonUser;
+import information.security.informationsecurity.model.auth.Role;
 import information.security.informationsecurity.model.auth.Token;
 import information.security.informationsecurity.model.auth.User;
 import information.security.informationsecurity.repository.auth.TokenRepository;
@@ -44,9 +44,34 @@ public class AuthenticationService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
+    public RegisterResponseDTO register(RegisterRequestDTO request) {
+        if(repository.findByUsername(request.getUsername()).isPresent()) {
+            return new RegisterResponseDTO(-1, "User Already Exists", null,null, null, null, null, null);
+        }
+
+        CommonUser user = new CommonUser();
+        user.setUsername(request.getUsername());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setName(request.getName());
+        user.setSurname(request.getSurname());
+        user.setOrganization(request.getOrganization());
+        user.setRole(Role.C);
+        user.setAuthorities("COMMON");
+
+        user = repository.save(user);
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        saveUserToken(accessToken, refreshToken, user);
+
+        return new RegisterResponseDTO(user.getId(), "User Created Successfully", user.getUsername(), user.getName(), user.getSurname(),request.getOrganization(), accessToken, refreshToken);
+
+    }
+
     public LoginResponseDTO authenticate(LoginRequestDTO request) {
         // Lookup user by email
-        User user = repository.findByUsername(request.getEmail())
+        User user = repository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new UserAuthenticationException(
                         "Invalid email or password",
                         UserAuthenticationException.ErrorType.USER_NOT_FOUND
@@ -56,7 +81,7 @@ public class AuthenticationService {
         // Authenticate user credentials
         try {
             authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
-                    request.getEmail(),
+                    request.getUsername(),
                     request.getPassword()
             ));
         } catch (Exception e) {
