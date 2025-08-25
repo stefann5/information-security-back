@@ -33,6 +33,16 @@ public class AuthenticationController {
         return ResponseEntity.ok(authService.authenticate(request));
     }
 
+    @GetMapping("/activate")
+    public ResponseEntity<String> activate(@RequestParam("token") String token) {
+        try {
+            String message = authService.activate(token);
+            return ResponseEntity.ok(message);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
     @GetMapping("/test")
     public ResponseEntity<String> test() {
         return ResponseEntity.ok("ahahahha");

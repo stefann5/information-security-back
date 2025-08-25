@@ -1,6 +1,7 @@
 package information.security.informationsecurity.service.auth;
 
 import information.security.informationsecurity.exceptions.TokenExpiredException;
+import information.security.informationsecurity.model.auth.User;
 import information.security.informationsecurity.repository.auth.TokenRepository;
 import information.security.informationsecurity.repository.user.UserRepository;
 import io.jsonwebtoken.Claims;
@@ -11,7 +12,6 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 

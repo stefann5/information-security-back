@@ -36,6 +36,7 @@ public class AuthenticationService {
     private final information.security.informationsecurity.repository.auth.TokenRepository tokenRepository;
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
+    private final EmailService emailService;
 
     private String generateSecurePassword() {
         SecureRandom secureRandom = new SecureRandom();
@@ -58,7 +59,16 @@ public class AuthenticationService {
         user.setRole(Role.C);
         user.setAuthorities("COMMON");
 
+
+        long activationTokenExpire = 24 * 60 * 60 * 1000;
+        String activationToken = jwtService.generateActivationToken(user, activationTokenExpire);
+        user.setActivationToken(activationToken);
+        user.setTokenExpiration(new Date(System.currentTimeMillis() + activationTokenExpire));
+        user.setActive(false);
+
         user = repository.save(user);
+
+        sendActivationEmail(user.getUsername(), activationToken);
 
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
@@ -67,6 +77,17 @@ public class AuthenticationService {
 
         return new RegisterResponseDTO(user.getId(), "User Created Successfully", user.getUsername(), user.getName(), user.getSurname(),request.getOrganization(), accessToken, refreshToken);
 
+    }
+
+    private void sendActivationEmail(String email, String token) {
+        String activationLink = "http://localhost:8080/api/v1/auth/activate?token=" + token;
+        emailService.sendMail(
+                "system@securely.com",
+                email,
+                "Activate Your Account",
+                "Click the link to activate your account: \n\n" + "<a href='" + activationLink + "'> Activate" + "</a>" +
+                        "\n\nThe link will expire in 24 hours."
+        );
     }
 
     public LoginResponseDTO authenticate(LoginRequestDTO request) {
@@ -88,6 +109,14 @@ public class AuthenticationService {
             throw new UserAuthenticationException(
                     "Invalid email or password",
                     UserAuthenticationException.ErrorType.INVALID_CREDENTIALS
+            );
+        }
+
+        if(!user.isActive()){
+            throw new UserAuthenticationException(
+
+                    "Your account is not active\n",
+                    UserAuthenticationException.ErrorType.USER_NOT_FOUND
             );
         }
 
@@ -123,6 +152,29 @@ public class AuthenticationService {
         token.setLoggedOut(false);
         token.setUser(user);
         tokenRepository.save(token);
+    }
+
+    public String activate(String activationToken) {
+        // Extract the username from the token
+        String username = jwtService.extractUsername(activationToken);
+
+        // Validate the token and retrieve the user
+        User user = repository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired token"));
+
+        // Check if the token matches and has not expired
+        if (!user.getActivationToken().equals(activationToken) ||
+                user.getTokenExpiration().before(new Date())) {
+            throw new RuntimeException("Invalid or expired activation token");
+        }
+
+        // Update user status to verified
+        user.setActive(true);
+        user.setActivationToken(null); // Clear the activation token
+        user.setTokenExpiration(null); // Clear the token expiration
+        repository.save(user);
+
+        return "Account verified successfully!";
     }
 
     public ResponseEntity<AuthenticationResponse> refreshToken(
