@@ -54,9 +54,10 @@ public class PasswordValidator {
         }
 
         // Check for special characters
-        if (!password.matches(".*[!@#$%^&*()_+\\-=[\\]{};':\"\\\\|,.<>/?].*")) {
+        if (!password.matches(".*[!@#$%^&*()_+\\-\\=\\[\\]{};':\"\\\\|,.<>/?].*")) {
             throw new PasswordValidationException("Password must contain at least one special character");
         }
+
 
         // Check against common passwords
         if (COMMON_PASSWORDS.contains(password.toLowerCase())) {
