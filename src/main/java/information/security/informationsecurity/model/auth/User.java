@@ -33,4 +33,9 @@ public class User {
 
     private Role role;
     private String authorities;
+
+    private boolean active = false;
+    private String activationToken;
+    private Date tokenExpiration;
+
 }

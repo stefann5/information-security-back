@@ -1,12 +1,12 @@
 package information.security.informationsecurity.service.auth;
 
 import information.security.informationsecurity.dto.auth.*;
+import information.security.informationsecurity.dto.auth.password.PasswordValidator;
+import information.security.informationsecurity.exceptions.PasswordValidationException;
 import information.security.informationsecurity.exceptions.UserAuthenticationException;
 import information.security.informationsecurity.model.auth.CommonUser;
 import information.security.informationsecurity.model.auth.Role;
-import information.security.informationsecurity.model.auth.Token;
 import information.security.informationsecurity.model.auth.User;
-import information.security.informationsecurity.repository.auth.TokenRepository;
 import information.security.informationsecurity.repository.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,11 +20,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +34,8 @@ public class AuthenticationService {
     private final information.security.informationsecurity.repository.auth.TokenRepository tokenRepository;
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
+    private final EmailService emailService;
+    private final PasswordValidator passwordValidator;
 
     private String generateSecurePassword() {
         SecureRandom secureRandom = new SecureRandom();
@@ -45,6 +45,13 @@ public class AuthenticationService {
     }
 
     public RegisterResponseDTO register(RegisterRequestDTO request) {
+        // Validacija password-a PRE enkodiranja
+        try {
+            passwordValidator.validatePassword(request.getPassword());
+        } catch (PasswordValidationException e) {
+            return new RegisterResponseDTO(-1, "Password is invalid!", null, null, null, null, null, null);
+        }
+
         if(repository.findByUsername(request.getUsername()).isPresent()) {
             return new RegisterResponseDTO(-1, "User Already Exists", null,null, null, null, null, null);
         }
@@ -58,7 +65,16 @@ public class AuthenticationService {
         user.setRole(Role.C);
         user.setAuthorities("COMMON");
 
+
+        long activationTokenExpire = 24 * 60 * 60 * 1000;
+        String activationToken = jwtService.generateActivationToken(user, activationTokenExpire);
+        user.setActivationToken(activationToken);
+        user.setTokenExpiration(new Date(System.currentTimeMillis() + activationTokenExpire));
+        user.setActive(false);
+
         user = repository.save(user);
+
+        sendActivationEmail(user.getUsername(), activationToken);
 
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
@@ -67,6 +83,17 @@ public class AuthenticationService {
 
         return new RegisterResponseDTO(user.getId(), "User Created Successfully", user.getUsername(), user.getName(), user.getSurname(),request.getOrganization(), accessToken, refreshToken);
 
+    }
+
+    private void sendActivationEmail(String email, String token) {
+        String activationLink = "http://localhost:8080/api/v1/auth/activate?token=" + token;
+        emailService.sendMail(
+                "system@securely.com",
+                email,
+                "Activate Your Account",
+                "Click the link to activate your account: \n\n" + "<a href='" + activationLink + "'> Activate" + "</a>" +
+                        "\n\nThe link will expire in 24 hours."
+        );
     }
 
     public LoginResponseDTO authenticate(LoginRequestDTO request) {
@@ -88,6 +115,14 @@ public class AuthenticationService {
             throw new UserAuthenticationException(
                     "Invalid email or password",
                     UserAuthenticationException.ErrorType.INVALID_CREDENTIALS
+            );
+        }
+
+        if(!user.isActive()){
+            throw new UserAuthenticationException(
+
+                    "Your account is not active\n",
+                    UserAuthenticationException.ErrorType.USER_NOT_FOUND
             );
         }
 
@@ -125,41 +160,67 @@ public class AuthenticationService {
         tokenRepository.save(token);
     }
 
+    public String activate(String activationToken) {
+        // Extract the username from the token
+        String username = jwtService.extractUsername(activationToken);
+
+        // Validate the token and retrieve the user
+        User user = repository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired token"));
+
+        // Check if the token matches and has not expired
+        if (!user.getActivationToken().equals(activationToken) ||
+                user.getTokenExpiration().before(new Date())) {
+            throw new RuntimeException("Invalid or expired activation token");
+        }
+
+        // Update user status to verified
+        user.setActive(true);
+        user.setActivationToken(null); // Clear the activation token
+        user.setTokenExpiration(null); // Clear the token expiration
+        repository.save(user);
+
+        return "Account verified successfully!";
+    }
+
     public ResponseEntity<AuthenticationResponse> refreshToken(
             HttpServletRequest request,
             HttpServletResponse response) {
 
-        // Extract the token from the Authorization header
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Missing or invalid Authorization header"));
         }
 
         String token = authHeader.substring(7);
 
-        // Extract username from the token
-        String username = jwtService.extractUsername(token);
+        try {
+            String username = jwtService.extractUsername(token);
 
-        // Check if the user exists in the database
-        User user = repository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("No user found"));
+            User user = repository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Check if the token is valid
-        if (jwtService.isValidRefreshToken(token, user)) {
-            // Generate new access and refresh tokens
-            String accessToken = jwtService.generateAccessToken(user);
-            String refreshToken = jwtService.generateRefreshToken(user);
+            if (jwtService.isValidRefreshToken(token, user)) {
+                String accessToken = jwtService.generateAccessToken(user);
+                String refreshToken = jwtService.generateRefreshToken(user);
 
-            // Revoke all previous tokens and save the new ones
-            revokeAllTokenByUser(user);
-            saveUserToken(accessToken, refreshToken, user);
+                revokeAllTokenByUser(user);
+                saveUserToken(accessToken, refreshToken, user);
 
-            // Return both tokens in the response
-            return ResponseEntity.ok(new AuthenticationResponse(accessToken, refreshToken, "New token generated"));
+                return ResponseEntity.ok(new AuthenticationResponse(accessToken, refreshToken, "Tokens refreshed successfully"));
+            }
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Invalid refresh token"));
+
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Refresh token expired"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Token refresh failed"));
         }
-
-        // If token is invalid or expired, return 401 Unauthorized
-        return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
     }
 }
