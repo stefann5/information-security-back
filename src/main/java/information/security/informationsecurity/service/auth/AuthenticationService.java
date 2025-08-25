@@ -1,12 +1,12 @@
 package information.security.informationsecurity.service.auth;
 
 import information.security.informationsecurity.dto.auth.*;
+import information.security.informationsecurity.dto.auth.password.PasswordValidator;
+import information.security.informationsecurity.exceptions.PasswordValidationException;
 import information.security.informationsecurity.exceptions.UserAuthenticationException;
 import information.security.informationsecurity.model.auth.CommonUser;
 import information.security.informationsecurity.model.auth.Role;
-import information.security.informationsecurity.model.auth.Token;
 import information.security.informationsecurity.model.auth.User;
-import information.security.informationsecurity.repository.auth.TokenRepository;
 import information.security.informationsecurity.repository.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,11 +20,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +35,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final PasswordValidator passwordValidator;
 
     private String generateSecurePassword() {
         SecureRandom secureRandom = new SecureRandom();
@@ -46,6 +45,13 @@ public class AuthenticationService {
     }
 
     public RegisterResponseDTO register(RegisterRequestDTO request) {
+        // Validacija password-a PRE enkodiranja
+        try {
+            passwordValidator.validatePassword(request.getPassword());
+        } catch (PasswordValidationException e) {
+            return new RegisterResponseDTO(-1, "Password is invalid!", null, null, null, null, null, null);
+        }
+
         if(repository.findByUsername(request.getUsername()).isPresent()) {
             return new RegisterResponseDTO(-1, "User Already Exists", null,null, null, null, null, null);
         }

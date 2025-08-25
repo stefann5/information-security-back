@@ -5,6 +5,7 @@ import information.security.informationsecurity.service.auth.UserDetailsServiceI
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -17,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.client.RestTemplate;
 
 @Configuration
 @EnableWebSecurity
@@ -41,7 +43,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults()) // Add this line for CORS
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh_token", "/api/v1/auth/register", "/api/v1/auth/activate")
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh_token", "/api/v1/auth/register",
+                                "/api/v1/auth/activate")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
@@ -84,7 +87,6 @@ public class SecurityConfig {
 //                .build();
 //
 //    }
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
