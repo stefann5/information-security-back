@@ -129,37 +129,40 @@ public class AuthenticationService {
             HttpServletRequest request,
             HttpServletResponse response) {
 
-        // Extract the token from the Authorization header
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Missing or invalid Authorization header"));
         }
 
         String token = authHeader.substring(7);
 
-        // Extract username from the token
-        String username = jwtService.extractUsername(token);
+        try {
+            String username = jwtService.extractUsername(token);
 
-        // Check if the user exists in the database
-        User user = repository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("No user found"));
+            User user = repository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Check if the token is valid
-        if (jwtService.isValidRefreshToken(token, user)) {
-            // Generate new access and refresh tokens
-            String accessToken = jwtService.generateAccessToken(user);
-            String refreshToken = jwtService.generateRefreshToken(user);
+            if (jwtService.isValidRefreshToken(token, user)) {
+                String accessToken = jwtService.generateAccessToken(user);
+                String refreshToken = jwtService.generateRefreshToken(user);
 
-            // Revoke all previous tokens and save the new ones
-            revokeAllTokenByUser(user);
-            saveUserToken(accessToken, refreshToken, user);
+                revokeAllTokenByUser(user);
+                saveUserToken(accessToken, refreshToken, user);
 
-            // Return both tokens in the response
-            return ResponseEntity.ok(new AuthenticationResponse(accessToken, refreshToken, "New token generated"));
+                return ResponseEntity.ok(new AuthenticationResponse(accessToken, refreshToken, "Tokens refreshed successfully"));
+            }
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Invalid refresh token"));
+
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Refresh token expired"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthenticationResponse(null, null, "Token refresh failed"));
         }
-
-        // If token is invalid or expired, return 401 Unauthorized
-        return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
     }
 }

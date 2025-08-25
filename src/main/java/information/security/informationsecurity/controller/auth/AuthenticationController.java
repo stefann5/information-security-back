@@ -33,6 +33,11 @@ public class AuthenticationController {
         return ResponseEntity.ok(authService.authenticate(request));
     }
 
+    @GetMapping("/test")
+    public ResponseEntity<String> test() {
+        return ResponseEntity.ok("ahahahha");
+    }
+
     @PostMapping("/refresh_token")
     public ResponseEntity<AuthenticationResponse> refreshToken(
             HttpServletRequest request,
