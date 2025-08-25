@@ -5,10 +5,10 @@ import information.security.informationsecurity.service.auth.UserDetailsServiceI
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -18,34 +18,50 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.client.RestTemplate;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true) // Enable method-level security
 public class SecurityConfig {
 
-    private final information.security.informationsecurity.service.auth.UserDetailsServiceImp userDetailsServiceImp;
-
-    private final information.security.informationsecurity.filter.JwtAuthenticationFilter jwtAuthenticationFilter;
-
+    private final UserDetailsServiceImp userDetailsServiceImp;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomLogoutHandler logoutHandler;
 
-    public SecurityConfig(information.security.informationsecurity.service.auth.UserDetailsServiceImp userDetailsServiceImp,
-                          information.security.informationsecurity.filter.JwtAuthenticationFilter jwtAuthenticationFilter,
+    public SecurityConfig(UserDetailsServiceImp userDetailsServiceImp,
+                          JwtAuthenticationFilter jwtAuthenticationFilter,
                           CustomLogoutHandler logoutHandler) {
         this.userDetailsServiceImp = userDetailsServiceImp;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.logoutHandler = logoutHandler;
     }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(Customizer.withDefaults()) // Add this line for CORS
+                .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh_token", "/api/v1/auth/register",
-                                "/api/v1/auth/activate")
+                        // Public authentication endpoints
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh_token",
+                                "/api/v1/auth/register", "/api/v1/auth/activate")
                         .permitAll()
+
+                        // Public certificate verification endpoints (for CRL, OCSP)
+                        .requestMatchers("/api/v1/pki/crl/**", "/api/v1/pki/ocsp/**",
+                                "/api/v1/pki/ca-certificates/public")
+                        .permitAll()
+
+                        // Admin only endpoints
+                        .requestMatchers("/api/v1/admin/**")
+                        .hasAuthority("ADMIN")
+
+                        // CA and Admin endpoints for certificate management
+                        .requestMatchers("/api/v1/certificates/issue", "/api/v1/certificates/csr",
+                                "/api/v1/certificates/templates")
+                        .hasAnyAuthority("ADMIN", "CA")
+
+                        // All other requests need authentication
                         .anyRequest()
                         .authenticated()
                 )
@@ -55,38 +71,18 @@ public class SecurityConfig {
                 .sessionManagement(sess -> sess
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .logout(logout -> logout
+                        .logoutUrl("/api/v1/auth/logout")
+                        .addLogoutHandler(logoutHandler)
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            response.setStatus(HttpStatus.OK.value());
+                        })
+                );
 
         return http.build();
     }
-//    @Bean
-//    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-//
-//        return http
-//                .csrf(AbstractHttpConfigurer::disable)
-//                .authorizeHttpRequests(
-//                        req->req//.requestMatchers("/login/**","/register-eo/**", "/refresh_token/**")
-//                                //.permitAll()
-//                                //.requestMatchers("/admin_only/**").hasAuthority("ADMIN")
-//                                .anyRequest().permitAll()
-//                                //.authenticated()
-//                ).userDetailsService(userDetailsServiceImp)
-//                .sessionManagement(session->session
-//                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-//                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-//                .exceptionHandling(
-//                        e->e.accessDeniedHandler(
-//                                        (request, response, accessDeniedException)->response.setStatus(403)
-//                                )
-//                                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-//                .logout(l->l
-//                        .logoutUrl("/logout")
-//                        .addLogoutHandler(logoutHandler)
-//                        .logoutSuccessHandler((request, response, authentication) -> SecurityContextHolder.clearContext()
-//                        ))
-//                .build();
-//
-//    }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -96,6 +92,4 @@ public class SecurityConfig {
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
-
-
 }
