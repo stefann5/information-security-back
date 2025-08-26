@@ -44,11 +44,6 @@ public class AuthenticationController {
         }
     }
 
-    @GetMapping("/test")
-    public ResponseEntity<StringBodyTest> test() {
-        return ResponseEntity.ok(new StringBodyTest());
-    }
-
     @PostMapping("/refresh_token")
     public ResponseEntity<AuthenticationResponse> refreshToken(
             HttpServletRequest request,
@@ -56,9 +51,4 @@ public class AuthenticationController {
     ) {
         return authService.refreshToken(request, response);
     }
-}
-
-@Data
-class StringBodyTest{
-    public String message = "ahahahah";
 }
