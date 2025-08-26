@@ -57,9 +57,15 @@ public class SecurityConfig {
                         .hasAuthority("ADMIN")
 
                         // CA and Admin endpoints for certificate management
-                        .requestMatchers("/api/v1/certificates/issue", "/api/v1/certificates/csr",
+                        .requestMatchers("/api/v1/certificates/issue",
                                 "/api/v1/certificates/templates")
                         .hasAnyAuthority("ADMIN", "CA")
+
+                        .requestMatchers("/api/v1/certificates/csr")
+                        .hasAnyAuthority("ADMIN", "CA","COMMON")
+
+                        .requestMatchers("/api/v1/admin/**")
+                        .hasAuthority("ADMIN")
 
                         // All other requests need authentication
                         .anyRequest()

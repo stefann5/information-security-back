@@ -326,4 +326,55 @@ public class CertificateService {
         }
         return "";
     }
+
+    /**
+     * Issue a new certificate for a specific user (used by admin)
+     */
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA')")
+    public CertificateResponseDTO issueCertificateForUser(CertificateRequestDTO request, String currentUsername, User targetUser) {
+        User currentUser = userRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Validate request
+        validationService.validateCertificateRequest(request, currentUser);
+
+        try {
+            // Generate key pair
+            KeyPair keyPair = cryptographyService.generateKeyPair(
+                    request.getAlgorithm(), request.getKeySize());
+
+            // Get issuer certificate for signing
+            Certificate issuerCert = null;
+            java.security.PrivateKey signingKey = null;
+
+            if (!"ROOT_CA".equals(request.getCertificateType())) {
+                issuerCert = certificateRepository.findById(request.getIssuerCertificateId())
+                        .orElseThrow(() -> new RuntimeException("Issuer certificate not found"));
+
+                // Validate that user can use this CA certificate
+                validationService.validateCACertificateAccess(issuerCert, currentUser);
+
+                // Get signing private key
+                signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert, currentUser);
+            }
+
+            // Create X.509 certificate
+            X509Certificate x509Cert = cryptographyService.createX509Certificate(
+                    request, keyPair, issuerCert, signingKey);
+
+            // Convert to our Certificate entity - assign ownership to target user
+            Certificate certificate = createCertificateEntity(request, x509Cert, keyPair, issuerCert, targetUser);
+
+            // Save certificate
+            certificate = certificateRepository.save(certificate);
+
+            // Save encrypted private key for target user
+            cryptographyService.saveEncryptedPrivateKey(certificate, keyPair.getPrivate(), targetUser);
+
+            return convertToResponseDTO(certificate);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to issue certificate: " + e.getMessage(), e);
+        }
+    }
 }

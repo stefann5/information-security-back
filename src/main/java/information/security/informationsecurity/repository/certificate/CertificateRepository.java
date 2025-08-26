@@ -21,6 +21,8 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     // Find certificates by owner
     List<Certificate> findByOwnerAndRevokedFalse(User owner);
 
+    List<Certificate> findByOwner(User owner);
+
     // Find certificates by type
     List<Certificate> findByCertificateTypeAndRevokedFalse(CertificateType certificateType);
 
@@ -55,4 +57,6 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
     // Find certificates by common name
     @Query("SELECT c FROM Certificate c WHERE c.subjectDN LIKE %:commonName% AND c.revoked = false")
     List<Certificate> findByCommonName(@Param("commonName") String commonName);
+
+
 }
