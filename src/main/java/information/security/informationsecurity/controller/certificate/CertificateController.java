@@ -1,6 +1,7 @@
 package information.security.informationsecurity.controller.certificate;
 
 import information.security.informationsecurity.dto.certificate.*;
+import information.security.informationsecurity.repository.user.UserRepository;
 import information.security.informationsecurity.service.certificate.CertificateService;
 import information.security.informationsecurity.service.certificate.KeystoreService;
 import information.security.informationsecurity.service.certificate.TemplateService;
@@ -24,6 +25,7 @@ public class CertificateController {
     private final CertificateService certificateService;
     private final KeystoreService keystoreService;
     private final TemplateService templateService;
+    private final UserRepository userRepository;
 
     /**
      * Issue a new certificate
@@ -236,8 +238,6 @@ public class CertificateController {
 
     // Helper methods
     private information.security.informationsecurity.model.auth.User getCurrentUser(Authentication authentication) {
-        // This would need to be implemented to get the current user from authentication
-        // For now, we'll use the username
-        return null; // Implementation would fetch user from repository using authentication.getName()
+        return userRepository.findByUsername(authentication.getName()).orElse(null);
     }
 }
