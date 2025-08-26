@@ -4,6 +4,7 @@ import information.security.informationsecurity.dto.auth.*;
 import information.security.informationsecurity.service.auth.AuthenticationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,8 +45,8 @@ public class AuthenticationController {
     }
 
     @GetMapping("/test")
-    public ResponseEntity<String> test() {
-        return ResponseEntity.ok("ahahahha");
+    public ResponseEntity<StringBodyTest> test() {
+        return ResponseEntity.ok(new StringBodyTest());
     }
 
     @PostMapping("/refresh_token")
@@ -55,4 +56,9 @@ public class AuthenticationController {
     ) {
         return authService.refreshToken(request, response);
     }
+}
+
+@Data
+class StringBodyTest{
+    public String message = "ahahahah";
 }
