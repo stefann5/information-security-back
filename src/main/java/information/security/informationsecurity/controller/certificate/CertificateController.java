@@ -50,7 +50,7 @@ public class CertificateController {
      * Process Certificate Signing Request
      */
     @PostMapping("/csr")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA','COMMON')")
     public ResponseEntity<CertificateResponseDTO> processCSR(
             @RequestBody CSRRequestDTO csrRequest,
             Authentication authentication) {
