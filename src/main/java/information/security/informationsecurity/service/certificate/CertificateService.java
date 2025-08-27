@@ -62,8 +62,8 @@ public class CertificateService {
                 signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert);
             }
 
-            if (!currentUser.getAuthorities().contains("CA")){
-                if(request.getOrganizationName().equals(currentUser.getOrganization())){
+            if (currentUser.getAuthorities().contains("CA")){
+                if(!request.getOrganizationName().equals(currentUser.getOrganization())){
                     throw new RuntimeException("CA user can only issue certificates for his organization");
                 }
             }
