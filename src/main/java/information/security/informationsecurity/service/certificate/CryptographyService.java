@@ -90,6 +90,12 @@ public class CryptographyService {
         if (request.getEmailAddress() != null) {
             subjectBuilder.addRDN(BCStyle.E, request.getEmailAddress());
         }
+        if(request.getLocality() != null) {
+            subjectBuilder.addRDN(BCStyle.L, request.getLocality());
+        }
+        if(request.getState() != null) {
+            subjectBuilder.addRDN(BCStyle.ST, request.getState());
+        }
 
         X500Name subject = subjectBuilder.build();
 
@@ -213,10 +219,11 @@ public class CryptographyService {
     /**
      * Get decrypted private key for certificate
      */
-    public java.security.PrivateKey getDecryptedPrivateKey(Certificate certificate, User user) throws Exception {
+    public java.security.PrivateKey getDecryptedPrivateKey(Certificate certificate) throws Exception {
         PrivateKey privateKeyEntity = privateKeyRepository.findByCertificate(certificate)
                 .orElseThrow(() -> new RuntimeException("Private key not found"));
 
+        User user = certificate.getOwner();
         // Generate organization-specific decryption key
         SecretKey orgKey = generateOrganizationKey(user.getOrganization());
 
@@ -259,7 +266,7 @@ public class CryptographyService {
         }
 
         // Basic Constraints
-        if ("ROOT_CA".equals(request.getCertificateType()) || "INTERMEDIATE_CA".equals(request.getCertificateType())) {
+        if (("ROOT_CA".equals(request.getCertificateType()) || "INTERMEDIATE_CA".equals(request.getCertificateType()))&&request.getPathLenConstraint() != null) {
             BasicConstraints basicConstraints = new BasicConstraints(request.getPathLenConstraint());
             certBuilder.addExtension(Extension.basicConstraints, true, basicConstraints);
         }
