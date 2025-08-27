@@ -74,6 +74,12 @@ public class CertificateController {
         return ResponseEntity.ok(certificates);
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<CertificateListDTO>> getAllCertificates(Authentication authentication) {
+        List<CertificateListDTO> certificates = certificateService.getAllCertificates();
+        return ResponseEntity.ok(certificates);
+    }
+
     /**
      * Get specific certificate details
      */

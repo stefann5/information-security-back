@@ -57,6 +57,12 @@ public class Certificate {
     @Column(name = "subject_alternative_names")
     private String subjectAlternativeNames;
 
+    @Column(name = "locality")
+    private String locality;
+
+    @Column(name = "state")
+    private String state;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "issuer_certificate_id")
     private Certificate issuerCertificate; // Parent CA certificate

@@ -59,7 +59,13 @@ public class CertificateService {
                 validationService.validateCACertificateAccess(issuerCert, currentUser);
 
                 // Get signing private key
-                signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert, currentUser);
+                signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert);
+            }
+
+            if (!currentUser.getAuthorities().contains("CA")){
+                if(request.getOrganizationName().equals(currentUser.getOrganization())){
+                    throw new RuntimeException("CA user can only issue certificates for his organization");
+                }
             }
 
             // Create X.509 certificate
@@ -85,7 +91,7 @@ public class CertificateService {
     /**
      * Process Certificate Signing Request (CSR)
      */
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA','COMMON')")
     public CertificateResponseDTO processCSR(CSRRequestDTO csrRequest, String currentUsername) {
         User currentUser = userRepository.findByUsername(currentUsername)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -101,7 +107,7 @@ public class CertificateService {
             validationService.validateCACertificateAccess(issuerCert, currentUser);
 
             // Get signing private key
-            java.security.PrivateKey signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert, currentUser);
+            java.security.PrivateKey signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert);
 
             // Create certificate from CSR
             X509Certificate x509Cert = cryptographyService.createCertificateFromCSR(
@@ -138,6 +144,13 @@ public class CertificateService {
             certificates = certificateRepository.findByOwnerAndRevokedFalse(currentUser);
         }
 
+        return certificates.stream()
+                .map(this::convertToListDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<CertificateListDTO> getAllCertificates() {
+        List<Certificate> certificates = certificateRepository.findByRevokedFalse();
         return certificates.stream()
                 .map(this::convertToListDTO)
                 .collect(Collectors.toList());
@@ -355,7 +368,7 @@ public class CertificateService {
                 validationService.validateCACertificateAccess(issuerCert, currentUser);
 
                 // Get signing private key
-                signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert, currentUser);
+                signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert);
             }
 
             // Create X.509 certificate

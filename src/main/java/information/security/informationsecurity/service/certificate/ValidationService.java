@@ -65,8 +65,6 @@ public class ValidationService {
             if (!((caCertificate.getOwner().getId())==(currentUser.getId()))) {
                 throw new RuntimeException("You can only use your own CA certificates");
             }
-        } else {
-            throw new RuntimeException("You don't have permission to use CA certificates");
         }
 
         // Validate CA certificate is still valid
@@ -167,16 +165,22 @@ public class ValidationService {
         dn.append("CN=").append(request.getCommonName());
 
         if (request.getOrganizationName() != null) {
-            dn.append(", O=").append(request.getOrganizationName());
+            dn.append(",O=").append(request.getOrganizationName());
         }
         if (request.getOrganizationalUnit() != null) {
-            dn.append(", OU=").append(request.getOrganizationalUnit());
+            dn.append(",OU=").append(request.getOrganizationalUnit());
         }
         if (request.getCountryCode() != null) {
-            dn.append(", C=").append(request.getCountryCode());
+            dn.append(",C=").append(request.getCountryCode());
         }
         if (request.getEmailAddress() != null) {
-            dn.append(", E=").append(request.getEmailAddress());
+            dn.append(",E=").append(request.getEmailAddress());
+        }
+        if(request.getLocality() != null) {
+            dn.append(",L=").append(request.getLocality());
+        }
+        if(request.getState() != null) {
+            dn.append(",ST=").append(request.getState());
         }
 
         return dn.toString();

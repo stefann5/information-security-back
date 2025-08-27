@@ -42,7 +42,7 @@ public class KeystoreService {
         X509Certificate x509Cert = convertPEMToX509(certificate.getCertificateData());
 
         // Get private key
-        java.security.PrivateKey privateKey = cryptographyService.getDecryptedPrivateKey(certificate, currentUser);
+        java.security.PrivateKey privateKey = cryptographyService.getDecryptedPrivateKey(certificate);
 
         // Build certificate chain
         List<X509Certificate> certChain = buildCertificateChain(certificate);
