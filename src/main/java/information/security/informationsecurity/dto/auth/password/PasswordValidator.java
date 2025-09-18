@@ -3,8 +3,14 @@ package information.security.informationsecurity.dto.auth.password;
 import information.security.informationsecurity.exceptions.PasswordValidationException;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.util.DigestUtils;
+import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 @AllArgsConstructor
@@ -18,11 +24,6 @@ public class PasswordValidator {
             "password", "123456", "123456789", "12345678", "12345", "1234567",
             "admin", "password123", "qwerty", "abc123", "letmein", "monkey",
             "welcome", "login", "admin123", "iloveyou", "sunshine", "password1"
-    );
-
-    // Za testiranje - u produkciji koristi pravi Pwned Passwords API
-    private static final Set<String> PWNED_PASSWORDS = Set.of(
-            "password", "123456", "qwerty", "admin", "letmein"
     );
 
     public void validatePassword(String password) {
@@ -72,8 +73,35 @@ public class PasswordValidator {
 
 
     private boolean isPwnedPassword(String password) {
-        // U stvarnoj implementaciji pozovi Pwned Passwords API
-        // https://haveibeenpwned.com/API/v3#PwnedPasswords
-        return PWNED_PASSWORDS.contains(password.toLowerCase());
+        try {
+            // Generiši SHA-1 hash od password-a
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            byte[] hashBytes = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            String sha1Hash = bytesToHex(hashBytes).toUpperCase();
+
+            String hashPrefix = sha1Hash.substring(0, 5);
+            String hashSuffix = sha1Hash.substring(5);
+
+            String url = "https://api.pwnedpasswords.com/range/" + hashPrefix;
+
+            RestTemplate restTemplate = new RestTemplate();
+            String response = restTemplate.getForObject(url, String.class);
+
+            // Proveri da li se hash suffix nalazi u odgovoru
+            return Arrays.stream(response.split("\n"))
+                    .anyMatch(line -> line.startsWith(hashSuffix));
+
+        } catch (Exception e) {
+            // Fallback na lokalnu listu ako API ne radi
+            throw new PasswordValidationException("This password has been found in data breaches. Please choose a different password.");
+        }
+    }
+
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
     }
 }

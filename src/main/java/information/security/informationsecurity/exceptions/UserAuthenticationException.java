@@ -6,7 +6,8 @@ public class UserAuthenticationException extends RuntimeException {
 
     public enum ErrorType {
         USER_NOT_FOUND,
-        INVALID_CREDENTIALS
+        INVALID_CREDENTIALS,
+        USER_NOT_ACTIVE
     }
 
     @Getter

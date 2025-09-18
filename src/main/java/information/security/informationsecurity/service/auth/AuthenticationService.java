@@ -18,6 +18,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -49,7 +51,7 @@ public class AuthenticationService {
         try {
             passwordValidator.validatePassword(request.getPassword());
         } catch (PasswordValidationException e) {
-            return new RegisterResponseDTO(-1, "Password is invalid!", null, null, null, null, null, null);
+            return new RegisterResponseDTO(-1, "Password is invalid or pwned!", null, null, null, null, null, null);
         }
 
         if(repository.findByUsername(request.getUsername()).isPresent()) {
@@ -122,7 +124,7 @@ public class AuthenticationService {
             throw new UserAuthenticationException(
 
                     "Your account is not active\n",
-                    UserAuthenticationException.ErrorType.USER_NOT_FOUND
+                    UserAuthenticationException.ErrorType.USER_NOT_ACTIVE
             );
         }
 
@@ -138,6 +140,8 @@ public class AuthenticationService {
 
         return new LoginResponseDTO(accessToken, refreshToken);
     }
+
+
 
     private void revokeAllTokenByUser(User user) {
         List<information.security.informationsecurity.model.auth.Token> validTokens = tokenRepository.findAllAccessTokensByUser(user.getId());
@@ -223,4 +227,7 @@ public class AuthenticationService {
                     .body(new AuthenticationResponse(null, null, "Token refresh failed"));
         }
     }
+
 }
+
+

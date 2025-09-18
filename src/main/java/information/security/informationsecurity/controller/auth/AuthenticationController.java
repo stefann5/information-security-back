@@ -1,6 +1,7 @@
 package information.security.informationsecurity.controller.auth;
 
 import information.security.informationsecurity.dto.auth.*;
+import information.security.informationsecurity.exceptions.UserAuthenticationException;
 import information.security.informationsecurity.service.auth.AuthenticationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 public class AuthenticationController {
 
     private final AuthenticationService authService;
-    private final PasswordEncoder passwordEncoder;
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponseDTO> register(
@@ -50,5 +50,28 @@ public class AuthenticationController {
             HttpServletResponse response
     ) {
         return authService.refreshToken(request, response);
+    }
+
+    @ExceptionHandler(UserAuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleAuthException(UserAuthenticationException e) {
+        ErrorResponse error = new ErrorResponse(e.getMessage(), e.getErrorType());
+        return ResponseEntity.status(401).body(error);
+    }
+
+
+    public class ErrorResponse {
+        private String message;
+        private String errorType;
+
+        public ErrorResponse(String message, UserAuthenticationException.ErrorType errorType) {
+            this.message = message;
+            this.errorType = errorType.name();
+        }
+
+        // getters i setters
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+        public String getErrorType() { return errorType; }
+        public void setErrorType(String errorType) { this.errorType = errorType; }
     }
 }
