@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.StringReader;
@@ -18,11 +17,9 @@ import java.math.BigInteger;
 import java.security.*;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
 import java.util.Date;
-import java.util.List;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -119,7 +116,7 @@ public class CryptographyService {
                 issuer, serial, notBefore, notAfter, subject, keyPair.getPublic());
 
         // Add extensions
-        addExtensions(certBuilder, request, keyPair.getPublic());
+        addExtensions(certBuilder, request, keyPair.getPublic(), issuerCert);
 
         // Sign certificate
         java.security.PrivateKey privateKeyToUse = signingKey != null ? signingKey : keyPair.getPrivate();
@@ -243,17 +240,41 @@ public class CryptographyService {
     // Private helper methods
 
     private void addExtensions(X509v3CertificateBuilder certBuilder, CertificateRequestDTO request,
-                               PublicKey publicKey) throws Exception {
+                               PublicKey publicKey, Certificate issuerCert) throws Exception {
 
         // Subject Key Identifier
         certBuilder.addExtension(Extension.subjectKeyIdentifier, false,
                 new SubjectKeyIdentifier(publicKey.getEncoded()));
 
         // Authority Key Identifier (for non-root certificates)
-        if (!"ROOT_CA".equals(request.getCertificateType())) {
+        if (!"ROOT_CA".equals(request.getCertificateType()) && issuerCert != null) {
             // This would need the issuer's public key - simplified for now
             certBuilder.addExtension(Extension.authorityKeyIdentifier, false,
                     new AuthorityKeyIdentifier(publicKey.getEncoded()));
+        }
+
+        //CRL Distribution Points (Where to check if certificate is withdrawn)
+        if (!"ROOT_CA".equals(request.getCertificateType()) && issuerCert != null) {
+            String crlURL = "http://localhost:8443/api/v1/pki/crl/" + issuerCert.getId();
+
+            DistributionPointName distributionPointName = new DistributionPointName(
+                    new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, crlURL)));
+            DistributionPoint distributionPoint = new DistributionPoint(distributionPointName, null, null);
+            CRLDistPoint crlDistPoint = new CRLDistPoint(new DistributionPoint[]{distributionPoint});
+
+            certBuilder.addExtension(Extension.cRLDistributionPoints, false, crlDistPoint);
+        }
+
+        //Authority Information Access (OCSP URL for realtime check)
+        if (!"ROOT_CA".equals(request.getCertificateType()) && issuerCert != null) {
+            String ocspURL = "http://localhost:8443/api/v1/pki/ocsp";
+
+            AccessDescription ocspAccessDescription = new AccessDescription(
+                    AccessDescription.id_ad_ocsp,
+                    new GeneralName(GeneralName.uniformResourceIdentifier, ocspURL));
+            AuthorityInformationAccess aia = new AuthorityInformationAccess(ocspAccessDescription);
+
+            certBuilder.addExtension(Extension.authorityInfoAccess, false, aia);
         }
 
         // Key Usage
