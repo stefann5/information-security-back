@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayOutputStream;
 import java.io.StringReader;
 import java.math.BigInteger;
 import java.security.*;
@@ -336,5 +337,69 @@ public class CryptographyService {
             return ((java.security.interfaces.RSAPrivateKey) privateKey).getModulus().bitLength();
         }
         return null;
+    }
+
+    /**
+     * Create keystore containing certificate and private key (for autogenerate flow)
+     */
+    public byte[] createKeystoreWithPrivateKey(
+            X509Certificate certificate,
+            java.security.PrivateKey privateKey,
+            information.security.informationsecurity.model.certificate.Certificate issuerCert,
+            String password,
+            String keystoreType,
+            String alias) throws Exception {
+
+        // Create keystore
+        KeyStore keyStore = KeyStore.getInstance(keystoreType);
+        keyStore.load(null, null);
+
+        // Build certificate chain
+        java.security.cert.Certificate[] certChain;
+
+        if (issuerCert != null) {
+            // Load issuer certificate from PEM
+            X509Certificate issuerX509 = loadX509CertificateFromPEM(issuerCert.getCertificateData());
+
+            // Build chain: [end-entity cert, issuer cert]
+            // X509Certificate extends java.security.cert.Certificate, tako da je cast implicitni
+            certChain = new java.security.cert.Certificate[] { (java.security.cert.Certificate) certificate,  (java.security.cert.Certificate) issuerX509 };
+        } else {
+            // Self-signed certificate
+            certChain = new java.security.cert.Certificate[] { (java.security.cert.Certificate) certificate };
+        }
+
+        // Store private key with certificate chain
+        // Sad je tip ispravan: java.security.cert.Certificate[]
+        keyStore.setKeyEntry(
+                alias,
+                privateKey,
+                password.toCharArray(),
+                certChain
+        );
+
+        // Convert keystore to byte array
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        keyStore.store(outputStream, password.toCharArray());
+
+        return outputStream.toByteArray();
+    }
+
+    /**
+     * Helper method to load X.509 certificate from PEM string
+     */
+    private X509Certificate loadX509CertificateFromPEM(String pemData) throws Exception {
+        try (PEMParser parser = new PEMParser(new StringReader(pemData))) {
+            Object obj = parser.readObject();
+            if (obj instanceof X509CertificateHolder) {
+                return new JcaX509CertificateConverter()
+                        .setProvider("BC")
+                        .getCertificate((X509CertificateHolder) obj);
+            } else if (obj instanceof X509Certificate) {
+                return (X509Certificate) obj;
+            } else {
+                throw new IllegalArgumentException("Invalid certificate format");
+            }
+        }
     }
 }

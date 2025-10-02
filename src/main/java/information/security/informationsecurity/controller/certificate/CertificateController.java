@@ -242,6 +242,28 @@ public class CertificateController {
         }
     }
 
+    @PostMapping("/autogenerate")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA', 'COMMON')")
+    public ResponseEntity<?> autoGenerateCertificate(@RequestBody AutoGenerateCertificateDTO request, Authentication authentication) {
+        try {
+            if(request.getKeystorePassword() == null || request.getKeystorePassword().isEmpty()) {
+                return ResponseEntity.badRequest().body("Keystore password is required for autogenerate");
+            }
+
+            var result = certificateService.autoGenerateCertificate(request, authentication.getName());
+            String filename = "certificate-with-key." + request.getKeystoreType().toLowerCase();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                    .header("X-Certificate-Id", result.getCertificateId().toString())
+                    .header("X-Certificate-Serial", result.getSerialNumber())
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(result.getKeystoreBytes());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to auto-generate certificate: " + e.getMessage());
+        }
+    }
+
     // Helper methods
     private information.security.informationsecurity.model.auth.User getCurrentUser(Authentication authentication) {
         return userRepository.findByUsername(authentication.getName()).orElse(null);
