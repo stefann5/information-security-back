@@ -390,4 +390,87 @@ public class CertificateService {
             throw new RuntimeException("Failed to issue certificate: " + e.getMessage(), e);
         }
     }
+
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'CA', 'COMMON')")
+    public AutoGenerateResponseDTO autoGenerateCertificate(AutoGenerateCertificateDTO request, String currentUsername) {
+        User currentUser = userRepository.findByUsername(currentUsername).orElseThrow(() -> new RuntimeException("User not found"));
+
+        try {
+            Certificate issuerCert = certificateRepository.findById(request.getIssuerCertificateId())
+                    .orElseThrow(() -> new RuntimeException("Issuer certificate not found"));
+
+            validationService.validateCACertificateAccess(issuerCert, currentUser);
+
+            if (request.getValidTo().isAfter(issuerCert.getValidTo())) {
+                throw new RuntimeException("Certificate validity cannot exceed CA certificate validity");
+            }
+
+            if (currentUser.getAuthorities().contains("CA")) {
+                if (!request.getOrganizationName().equals(currentUser.getOrganization())) {
+                    throw new RuntimeException("CA user can only issue certificates for their organization");
+                }
+            }
+
+            KeyPair keyPair = cryptographyService.generateKeyPair(request.getAlgorithm(), request.getKeySize());
+
+            java.security.PrivateKey signingKey = cryptographyService.getDecryptedPrivateKey(issuerCert);
+            CertificateRequestDTO certRequest = buildCertificateRequestFromAutoGenerate(request);
+            X509Certificate x509Cert = cryptographyService.createX509Certificate(certRequest, keyPair, issuerCert, signingKey);
+
+            Certificate certificate = createCertificateEntity(certRequest, x509Cert, keyPair, issuerCert, currentUser);
+            certificate = certificateRepository.save(certificate);
+
+            byte[] keystoreBytes = cryptographyService.createKeystoreWithPrivateKey(
+                    x509Cert,
+                    keyPair.getPrivate(),
+                    issuerCert,
+                    request.getKeystorePassword(),
+                    request.getKeystoreType(),
+                    request.getAlias()
+            );
+
+            return new AutoGenerateResponseDTO(
+                    certificate.getId(),
+                    certificate.getSerialNumber(),
+                    certificate.getSubjectDN(),
+                    keystoreBytes,
+                    "Certificate generated successfully. Private key is included in the keystore - store it securely!"
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to auto-generate certificate: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Helper method to convert AutoGenerateCertificateDTO to CertificateRequestDTO
+     */
+    private CertificateRequestDTO buildCertificateRequestFromAutoGenerate(AutoGenerateCertificateDTO request) {
+        CertificateRequestDTO certRequest = new CertificateRequestDTO();
+
+        // X.500 Name components
+        certRequest.setCommonName(request.getCommonName());
+        certRequest.setOrganizationName(request.getOrganizationName());
+        certRequest.setOrganizationalUnit(request.getOrganizationalUnit());
+        certRequest.setCountryCode(request.getCountryCode());
+        certRequest.setEmailAddress(request.getEmailAddress());
+        certRequest.setLocality(request.getLocality());
+        certRequest.setState(request.getState());
+
+        // Certificate settings
+        certRequest.setIssuerCertificateId(request.getIssuerCertificateId());
+        certRequest.setValidFrom(request.getValidFrom());
+        certRequest.setValidTo(request.getValidTo());
+        certRequest.setCertificateType("END_ENTITY"); // Autogenerate is always for end-entity
+
+        // Key settings
+        certRequest.setAlgorithm(request.getAlgorithm());
+        certRequest.setKeySize(request.getKeySize());
+
+        // Extensions
+        certRequest.setKeyUsage(request.getKeyUsage());
+        certRequest.setExtendedKeyUsage(request.getExtendedKeyUsage());
+        certRequest.setSubjectAlternativeNames(request.getSubjectAlternativeNames());
+
+        return certRequest;
+    }
 }
